@@ -1,0 +1,602 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "opt_fields": [
+            "gid",
+            "name",
+            "due_on",
+            "due_at"
+          ],
+          "project": "=Cole_aqui_o_ID_do_Projeto",
+          "completed_since": "={{ $now }}"
+        }
+      },
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 1,
+      "position": [
+        928,
+        368
+      ],
+      "id": "2c9da39d-f671-453d-a731-71b879d13602",
+      "name": "Obter Tarefas",
+      "alwaysOutputData": false,
+      "credentials": {
+        "asanaApi": {
+          "id": "SUBSTITUIR_PELO_ID_DA_SUA_CREDENCIAL",
+          "name": "Inserir sua Credencial Asana"
+        }
+      },
+      "notes": "Nó para obtenção das tarefas junto ao Projeto selecionado anteriormente."
+    },
+    {
+      "parameters": {
+        "jsCode": "const tarefasAgrupadas = {};\n\nfor (const item of items) {\n  const parentGid = item.json.parent ? item.json.parent.gid : null;\n  if (!parentGid) continue;\n\n  if (!tarefasAgrupadas[parentGid]) {\n    tarefasAgrupadas[parentGid] = { \n      gid: parentGid, \n      abertura: null, \n      encerramento: null \n    };\n  }\n\n  const nome = item.json.name.toLowerCase();\n  if (nome.includes(\"abertura\")) {\n    tarefasAgrupadas[parentGid].abertura = item.json.notes;\n  } else if (nome.includes(\"encerr\")) {\n    tarefasAgrupadas[parentGid].encerramento = item.json.notes;\n  }\n}\n\nconst resultadoFinal = [];\n\nfor (const gid in tarefasAgrupadas) {\n  const dados = tarefasAgrupadas[gid];\n  let classificacao = \"Até 10 dias\";\n\n  if (dados.encerramento) {\n    const p = dados.encerramento.split(\"/\");\n    const dataVenc = new Date(`${p[2]}-${p[1]}-${p[0]}T23:59:59-03:00`);\n    if (new Date() > dataVenc) {\n      classificacao = \"Vencidos\";\n    }\n  }\n\n  if (classificacao !== \"Vencidos\" && dados.abertura) {\n    const p = dados.abertura.split(/[\\/\\sàs:]+/);\n    const dataAbertura = new Date(`${p[2]}-${p[1]}-${p[0]}T${p[3]}:${p[4]}:00-03:00`);\n    const dias = (new Date() - dataAbertura) / (1000 * 60 * 60 * 24);\n    \n    if (dias >= 10) {\n      classificacao = \"Mais de 10 dias\";\n    }\n  }\n\n  resultadoFinal.push({\n    json: {\n      gid: gid,\n      classificacao: classificacao\n    }\n  });\n}\n\nreturn resultadoFinal;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        752
+      ],
+      "id": "a6908df6-9255-4b6a-a4e9-86758726fe99",
+      "name": "Cálculo de Dias"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "393f0df7-5556-41bb-a75b-4ae0a1db8f89",
+                    "leftValue": "={{ $json.classificacao }}",
+                    "rightValue": "Vencidos",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Vencidos"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c5173a81-6597-415e-99eb-c3865a313f08",
+                    "leftValue": "={{ $json.classificacao }}",
+                    "rightValue": "Mais de 10 dias",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Mais de 10 dias"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.classificacao }}",
+                    "rightValue": "Até 10 dias",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "e73ae7d9-51da-49c0-8160-f15dfe9f113a"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Até 10 dias"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        352,
+        736
+      ],
+      "id": "dc7eb211-1ec3-4085-8b55-fa9a7a606aa3",
+      "name": "Conferência Prazos"
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "id": "={{ $json.gid }}",
+        "projectId": "=Cole_aqui_o_ID_do_Projeto",
+        "section": "=Selecione_aqui_o_nome_ou_ID_da_seção"
+      },
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 1,
+      "position": [
+        576,
+        560
+      ],
+      "id": "fc96cb04-7b7f-476e-8c8e-bb7e1b5784c3",
+      "name": "Vencidas",
+      "credentials": {
+        "asanaApi": {
+          "id": "SUBSTITUIR_PELO_ID_DA_SUA_CREDENCIAL",
+          "name": "Inserir sua Credencial Asana"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "id": "={{ $json.gid }}",
+        "projectId": "=Cole_aqui_o_ID_do_Projeto",
+        "section": "=Selecione_aqui_o_nome_ou_ID_da_seção"
+      },
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 1,
+      "position": [
+        576,
+        752
+      ],
+      "id": "75232564-5dea-42a0-a0d7-e69071844cbf",
+      "name": "Mais de 10 dias",
+      "credentials": {
+        "asanaApi": {
+          "id": "SUBSTITUIR_PELO_ID_DA_SUA_CREDENCIAL",
+          "name": "Inserir sua Credencial Asana"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "id": "={{ $json.gid }}",
+        "projectId": "=Cole_aqui_o_ID_do_Projeto",
+        "section": "=Selecione_aqui_o_nome_ou_ID_da_seção"
+      },
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 1,
+      "position": [
+        576,
+        944
+      ],
+      "id": "7157b79e-2631-4c74-a401-2ff7d74211f4",
+      "name": "Até 10 dias",
+      "credentials": {
+        "asanaApi": {
+          "id": "SUBSTITUIR_PELO_ID_DA_SUA_CREDENCIAL",
+          "name": "Inserir sua Credencial Asana"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "subtask",
+        "operation": "getAll",
+        "taskId": "={{ $json.gid }}",
+        "returnAll": true,
+        "options": {
+          "opt_fields": [
+            "gid",
+            "name",
+            "parent",
+            "notes",
+            "due_at",
+            "due_on"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 1,
+      "position": [
+        1168,
+        368
+      ],
+      "id": "a70829d1-a3f4-4268-a517-57937ca1e6a5",
+      "name": "Obter Subtarefas",
+      "credentials": {
+        "asanaApi": {
+          "id": "SUBSTITUIR_PELO_ID_DA_SUA_CREDENCIAL",
+          "name": "Inserir sua Credencial Asana"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "project",
+        "id": "Cole_aqui_o_ID_do_Projeto"
+      },
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 1,
+      "position": [
+        688,
+        368
+      ],
+      "id": "b193deea-c599-4ce9-82e6-0639e6a9bef4",
+      "name": "Selecionar Projeto",
+      "credentials": {
+        "asanaApi": {
+          "id": "SUBSTITUIR_PELO_ID_DA_SUA_CREDENCIAL",
+          "name": "Inserir sua Credencial Asana"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7,
+              "triggerAtMinute": 15
+            },
+            {
+              "triggerAtHour": 12,
+              "triggerAtMinute": 15
+            },
+            {
+              "triggerAtHour": 19,
+              "triggerAtMinute": 15
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -64,
+        608
+      ],
+      "id": "d0911e89-5cfa-4eaf-b152-2f7605e6bbb7",
+      "name": "Atualização Agendada"
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        800,
+        736
+      ],
+      "id": "38013dfa-ddf4-457a-8a46-d36145cd6e40",
+      "name": "Juntar Caminhos"
+    },
+    {
+      "parameters": {
+        "jsCode": "let vencidas = 0;\nlet mais10 = 0;\nlet ate10 = 0;\n\ntry { vencidas = $items(\"Vencidas\").length; } catch (e) {}\ntry { mais10 = $items(\"Mais de 10 dias\").length; } catch (e) {}\ntry { ate10 = $items(\"Até 10 dias\").length; } catch (e) {}\n\nreturn [\n  {\n    json: {\n      vencidas: vencidas,\n      mais10: mais10,\n      ate10: ate10,\n      total: vencidas + mais10 + ate10\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        752
+      ],
+      "id": "1ad98837-804a-41e1-8609-bf2d9fe81981",
+      "name": "Gerar Resumo"
+    },
+    {
+      "parameters": {
+        "content": "## 🏛️ Projeto Lumen: Automação LAI ",
+        "height": 800,
+        "width": 1456,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -112,
+        304
+      ],
+      "typeVersion": 1,
+      "id": "6c68898f-4250-4dc9-b50e-c124970eb2c9",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {
+          "userIds": "Cole_aqui_o_ID_do_Usuário_Caso_queira_exclusividade"
+        }
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -64,
+        384
+      ],
+      "id": "ee4e3f62-9a97-47f9-a7d3-e42d8e6c9e16",
+      "name": "Telegram",
+      "webhookId": "URL_DO_WEBHOOK_REMOVIDA",
+      "credentials": {
+        "telegramApi": {
+          "id": "SUBSTITUIR_PELO_ID_DA_SUA_CREDENCIAL",
+          "name": "Telegram (Bot Assistente)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d60c7d65-7ec9-4091-a3b5-a561eb9cdf66",
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/lumen",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        128,
+        384
+      ],
+      "id": "e6b1f704-bcc0-40c8-8552-b219e307b78e",
+      "name": "Verificar"
+    },
+    {
+      "parameters": {
+        "chatId": "=Cole_aqui_o_ID_do_Chat",
+        "text": "=🚀 <b>Lumen Iniciado</b>\n\nIniciando varredura no Asana...\n\n📅 {{ $now.format('FFF') }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        464,
+        368
+      ],
+      "id": "9c95ef61-617a-424a-bc32-689738096397",
+      "name": "Lumen Log Inicio",
+      "credentials": {
+        "telegramApi": {
+          "id": "SUBSTITUIR_PELO_ID_DA_SUA_CREDENCIAL",
+          "name": "Telegram (Bot Assistente)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "=Cole_aqui_o_ID_do_Chat",
+        "text": "=✅ <b>Execução Finalizada</b>\n\n📊 <b>Resumo do Processamento:</b>\n🟢 <b>Até 10 dias</b>: {{ $json.ate10 }}\n🟠 <b>Mais de 10 dias</b>: {{ $json.mais10 }}\n🔴 <b>Vencidas</b>: {{ $json.vencidas }}\n🧮 <b>Total</b>: {{ $json.total }}\n\n📅 {{ $now.format('FFF') }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "message_thread_id": "=Cole_aqui_o_ID_do_Fórum_do_Chat"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1168,
+        752
+      ],
+      "id": "b0a8974b-043f-4e34-a27a-03f2706641b5",
+      "name": "Lumen Log Fim",
+      "credentials": {
+        "telegramApi": {
+          "id": "SUBSTITUIR_PELO_ID_DA_SUA_CREDENCIAL",
+          "name": "Telegram (Bot Assistente)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Obter Tarefas": {
+      "main": [
+        [
+          {
+            "node": "Obter Subtarefas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cálculo de Dias": {
+      "main": [
+        [
+          {
+            "node": "Conferência Prazos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferência Prazos": {
+      "main": [
+        [
+          {
+            "node": "Vencidas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mais de 10 dias",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Até 10 dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vencidas": {
+      "main": [
+        [
+          {
+            "node": "Juntar Caminhos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mais de 10 dias": {
+      "main": [
+        [
+          {
+            "node": "Juntar Caminhos",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Até 10 dias": {
+      "main": [
+        [
+          {
+            "node": "Juntar Caminhos",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Obter Subtarefas": {
+      "main": [
+        [
+          {
+            "node": "Cálculo de Dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Selecionar Projeto": {
+      "main": [
+        [
+          {
+            "node": "Obter Tarefas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualização Agendada": {
+      "main": [
+        [
+          {
+            "node": "Lumen Log Inicio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Juntar Caminhos": {
+      "main": [
+        [
+          {
+            "node": "Gerar Resumo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar Resumo": {
+      "main": [
+        [
+          {
+            "node": "Lumen Log Fim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram": {
+      "main": [
+        [
+          {
+            "node": "Verificar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar": {
+      "main": [
+        [
+          {
+            "node": "Lumen Log Inicio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lumen Log Inicio": {
+      "main": [
+        [
+          {
+            "node": "Selecionar Projeto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "INSTANCIA_REMOVIDA"
+  }
+}
